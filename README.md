@@ -35,3 +35,5 @@ npm run dist     # build .exe into dist/
 ```
 
 VoiceChanger by W1CKIX
+https://github.com/naga7756441-afk/Voice-changer-/releases/tag/v1.0.1 
+Download 👆
