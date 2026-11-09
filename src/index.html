@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceChanger — real-time voice changer</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#151922; --panel2:#1b2030; --line:#262c3d;
+    --txt:#e8ecf5; --mut:#8a93a8; --acc:#8b5cf6; --acc2:#22d3ee; --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 10% -10%,#1d1640 0,transparent 60%),radial-gradient(900px 500px at 110% 10%,#0b3340 0,transparent 55%),var(--bg);
+    color:var(--txt);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);background:rgba(13,15,20,.7);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:grid;place-items:center;font-weight:800;font-size:18px}
+  h1{font-size:18px;margin:0} .sub{color:var(--mut);font-size:12px}
+  .grow{flex:1}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#555}
+  .dot.on{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  main{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px 22px;max-width:1400px;margin:0 auto}
+  @media (max-width:980px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:0 0 10px}
+  .col{display:flex;flex-direction:column;gap:16px}
+  button{font:inherit;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;transition:.15s}
+  button:hover{border-color:#3a4260;background:#20263a}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .big{width:100%;padding:14px;font-size:16px;font-weight:700;border:none;background:linear-gradient(135deg,var(--acc),#6d28d9)}
+  .big.stop{background:linear-gradient(135deg,#dc2626,#991b1b)}
+  select,input[type=text]{width:100%;font:inherit;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px}
+  label.small{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+  .row{display:flex;gap:8px;align-items:center}
+  .toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .toggle:first-of-type{border-top:none}
+  .toggle .t{font-weight:600} .toggle .d{font-size:12px;color:var(--mut)}
+  .sw{position:relative;width:46px;height:26px;flex:none}
+  .sw input{opacity:0;width:0;height:0}
+  .sw span{position:absolute;inset:0;background:#2a3043;border-radius:20px;transition:.2s;cursor:pointer}
+  .sw span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#cfd6e6;border-radius:50%;transition:.2s}
+  .sw input:checked+span{background:var(--acc)}
+  .sw input:checked+span:before{transform:translateX(20px);background:#fff}
+  .meter{height:8px;background:#0a0c11;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),var(--warn),var(--bad));transition:width .05s}
+  canvas{width:100%;height:150px;display:block;border-radius:10px;background:#0a0c11;border:1px solid var(--line)}
+  .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px}
+  .preset{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;text-align:center;position:relative}
+  .preset .e{font-size:24px}
+  .preset .n{font-size:12px;font-weight:600}
+  .preset.active{border-color:var(--acc);background:#251d45;box-shadow:0 0 0 1px var(--acc) inset}
+  .preset .x{position:absolute;top:3px;right:6px;font-size:12px;color:var(--mut);display:none}
+  .preset.custom:hover .x{display:block}
+  .groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .grp{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .grp h3{margin:0 0 6px;font-size:13px}
+  .param{margin:10px 0 2px}
+  .param .top{display:flex;justify-content:space-between;font-size:12px;color:var(--mut)}
+  .param .top b{color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--acc);height:20px}
+  .note{font-size:12px;color:var(--mut);line-height:1.5}
+  .warn{color:var(--warn)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tabs button.on{border-color:var(--acc);background:#251d45}
+  .hidden{display:none!important}
+  .kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:11px;color:var(--txt)}
+  .testbox{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .rec{color:var(--bad);font-weight:700}
+  .ab{display:flex;gap:8px;margin-top:8px}
+  .ab button.on{background:var(--warn);color:#111;border-color:var(--warn)}
+  /* --- desktop app title bar --- */
+  body.app header{-webkit-app-region:drag;padding-right:0;padding-top:0;padding-bottom:0;height:58px;user-select:none}
+  body.app header button, body.app header .wc{-webkit-app-region:no-drag}
+  .wc{display:none;height:58px;margin-left:10px}
+  body.app .wc{display:flex}
+  .wc button{border:none;border-radius:0;background:transparent;width:50px;height:100%;padding:0;font-size:15px;color:var(--mut)}
+  .wc button:hover{background:#232a3c;color:#fff}
+  .wc button.cls:hover{background:#e11d48;color:#fff}
+  .mutebadge{display:none;background:var(--bad);color:#fff;font-weight:700;font-size:11px;padding:3px 8px;border-radius:6px;margin-right:8px}
+  .mutebadge.on{display:inline-block}
+  .credit{font-size:11px;color:var(--mut);margin-left:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">V</div>
+  <div><h1>Voice Changer</h1><div class="sub">real-time voice changer · by W1CKIX</div></div>
+  <div class="grow"></div>
+  <span class="mutebadge" id="muteBadge">OUTPUT MUTED</span>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Microphone off</span></div>
+  <div class="wc">
+    <button id="wMin" title="Minimize">—</button>
+    <button id="wMax" title="Maximize">☐</button>
+    <button id="wClose" class="cls" title="Hide to tray">✕</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT -->
+  <div class="col">
+    <div class="card">
+      <button class="big" id="startBtn">🎙️ Turn on microphone</button>
+      <label class="small">Microphone</label>
+      <select id="inSel"><option value="">— turn on the microphone first —</option></select>
+      <label class="small">Input level</label>
+      <div class="meter"><i id="inMeter"></i></div>
+      <label class="small">Output level</label>
+      <div class="meter"><i id="outMeter"></i></div>
+      <div class="note" style="margin-top:8px" id="latency">Latency: —</div>
+    </div>
+
+    <div class="card">
+      <h2>Test — hear yourself</h2>
+      <div class="toggle">
+        <div><div class="t">🎧 Hear yourself</div><div class="d">Live sound to your speakers/headphones. Use headphones or you will get feedback.</div></div>
+        <label class="sw"><input type="checkbox" id="monitorChk"><span></span></label>
+      </div>
+      <div class="ab">
+        <button id="bypassBtn" style="flex:1" title="Key B">A/B: effect ON</button>
+      </div>
+      <div class="note" style="margin-top:12px">No headphones? Record a phrase and listen to how it sounds.</div>
+      <button id="recBtn" style="width:100%;margin-top:8px" disabled>⏺ Record 5 seconds</button>
+      <div class="testbox">
+        <button id="playOrig" disabled>▶ Original</button>
+        <button id="playFx" disabled>▶ With effect</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Output to virtual microphone</h2>
+      <div class="toggle">
+        <div><div class="t">🔌 Send voice</div><div class="d">For Discord, games and OBS.</div></div>
+        <label class="sw"><input type="checkbox" id="virtChk"><span></span></label>
+      </div>
+      <label class="small">Output device</label>
+      <select id="outSel"><option value="">Default</option></select>
+      <div class="note" style="margin-top:8px">
+        Requires the free <b>VB-Audio Virtual Cable</b>. Select <b>CABLE Input</b> here,
+        and set <b>CABLE Output</b> as the microphone in Discord or your game.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="toggle">
+        <div><div class="t">Noise suppression</div><div class="d">Built-in</div></div>
+        <label class="sw"><input type="checkbox" id="nsChk"><span></span></label>
+      </div>
+      <div class="toggle">
+        <div><div class="t">Echo cancellation</div><div class="d">Helps if you talk without headphones</div></div>
+        <label class="sw"><input type="checkbox" id="ecChk"><span></span></label>
+      </div>
+      <div class="note" style="margin-top:6px">Hotkeys: <span class="kbd">B</span> — A/B compare,
+        <span class="kbd">M</span> — hear yourself, <span class="kbd">1</span>…<span class="kbd">9</span> — voices</div>
+      <div class="note" style="margin-top:8px">Global (work in games):<br>
+        <span class="kbd">Ctrl+Shift+B</span> A/B · <span class="kbd">Ctrl+Shift+M</span> hear yourself<br>
+        <span class="kbd">Ctrl+Shift+V</span> mute output · <span class="kbd">Ctrl+Shift+1…9</span> voices</div>
+      <div class="note" style="margin-top:8px">The ✕ button hides the app to the tray, and your voice keeps changing. Quit fully from the tray icon.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col">
+    <div class="card">
+      <h2>Visualizer</h2>
+      <canvas id="viz" width="1200" height="300"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="tabs">
+        <button class="on" data-tab="presets">🎭 Voice presets</button>
+        <button data-tab="editor">🎛️ Voice editor</button>
+      </div>
+
+      <div id="tab-presets">
+        <div class="presets" id="presetGrid"></div>
+        <div class="note" style="margin-top:12px">Pick a voice, tweak it in the Editor tab and save it as your own.</div>
+      </div>
+
+      <div id="tab-editor" class="hidden">
+        <div class="row" style="margin-bottom:12px">
+          <input type="text" id="presetName" placeholder="Name your voice" maxlength="24">
+          <button id="savePreset" style="white-space:nowrap">💾 Save</button>
+          <button id="resetBtn" style="white-space:nowrap">↺ Reset</button>
+        </div>
+        <div class="groups" id="groups"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ===================== DSP (pitch shift + noise gate) ===================== */
+const DSP_SRC = `
+class VCDSP {
+  constructor(sr){
+    this.sr = sr; this.len = 16384; this.buf = new Float32Array(this.len);
+    this.w = 0; this.ph = 0; this.win = Math.floor(sr * 0.042);
+    this.env = 0; this.gg = 1; this.dec = Math.exp(-1 / (0.06 * sr));
+  }
+  tap(d){
+    let idx = this.w - d - 1; while (idx < 0) idx += this.len;
+    const i0 = idx | 0, f = idx - i0, i1 = (i0 + 1) % this.len;
+    return this.buf[i0] * (1 - f) + this.buf[i1] * f;
+  }
+  run(inp, out, n, ratio, gateDb){
+    const thr = Math.pow(10, gateDb / 20), gateOn = gateDb > -99, win = this.win, TAU = 6.283185307179586;
+    for (let i = 0; i < n; i++){
+      let x = inp ? inp[i] : 0;
+      const a = Math.abs(x);
+      this.env = a > this.env ? a : this.env * this.dec;
+      const target = (!gateOn || this.env > thr) ? 1 : 0;
+      this.gg += (target - this.gg) * (target > this.gg ? 0.02 : 0.0006);
+      x *= this.gg;
+      this.buf[this.w] = x;
+      let y;
+      if (Math.abs(ratio - 1) < 1e-4) { y = x; }
+      else {
+        this.ph += (1 - ratio) / win; this.ph -= Math.floor(this.ph);
+        const p2 = (this.ph + 0.5) % 1;
+        y = this.tap(this.ph * win) * (0.5 - 0.5 * Math.cos(TAU * this.ph))
+          + this.tap(p2 * win) * (0.5 - 0.5 * Math.cos(TAU * p2));
+      }
+      out[i] = y;
+      this.w = (this.w + 1) % this.len;
+    }
+  }
+}`;
+const WORKLET_SRC = DSP_SRC + `
+class VCProc extends AudioWorkletProcessor {
+  static get parameterDescriptors(){ return [
+    {name:'ratio', defaultValue:1, minValue:0.25, maxValue:4},
+    {name:'gate', defaultValue:-100, minValue:-100, maxValue:0}]; }
+  constructor(){ super(); this.d = new VCDSP(sampleRate); }
+  process(ins, outs, p){
+    const inp = ins[0] && ins[0][0]; const out = outs[0];
+    if (!out || !out[0]) return true;
+    this.d.run(inp, out[0], out[0].length, p.ratio[0], p.gate[0]);
+    for (let c = 1; c < out.length; c++) out[c].set(out[0]);
+    return true;
+  }
+}
+registerProcessor('vc-dsp', VCProc);`;
+
+/* ===================== Parameters ===================== */
+const PARAMS = [
+  {g:'🎚️ Pitch & tone', id:'pitch',  l:'Pitch', min:-12, max:12, step:0.5, def:0, u:' st'},
+  {g:'🎚️ Pitch & tone', id:'bass',   l:'Bass',   min:-15, max:15, step:1, def:0, u:' dB'},
+  {g:'🎚️ Pitch & tone', id:'mid',    l:'Mid', min:-15, max:15, step:1, def:0, u:' dB'},
+  {g:'🎚️ Pitch & tone', id:'treble', l:'Treble',  min:-15, max:15, step:1, def:0, u:' dB'},
+  {g:'🔉 Filters', id:'hp',   l:'Low cut (high-pass)', min:20, max:2000, step:10, def:20, u:' Hz'},
+  {g:'🔉 Filters', id:'lp',   l:'High cut (low-pass)', min:300, max:20000, step:50, def:20000, u:' Hz'},
+  {g:'🔉 Filters', id:'gate', l:'Noise gate (threshold)', min:-100, max:-20, step:1, def:-100, u:' dB', fmt:v=>v<=-99?'off':v+' dB'},
+  {g:'⚡ Effects', id:'dist',      l:'Distortion', min:0, max:100, step:1, def:0, u:'%'},
+  {g:'⚡ Effects', id:'robotFreq', l:'Robot: frequency', min:0, max:400, step:1, def:60, u:' Hz'},
+  {g:'⚡ Effects', id:'robotMix',  l:'Robot: amount', min:0, max:100, step:1, def:0, u:'%'},
+  {g:'⚡ Effects', id:'tremRate',  l:'Tremolo: speed', min:0.5, max:20, step:0.5, def:5, u:' Hz'},
+  {g:'⚡ Effects', id:'tremDepth', l:'Tremolo: depth', min:0, max:100, step:1, def:0, u:'%'},
+  {g:'🏛️ Space', id:'echoTime', l:'Echo: delay', min:0, max:1000, step:5, def:250, u:' ms'},
+  {g:'🏛️ Space', id:'echoFb',   l:'Echo: feedback', min:0, max:90, step:1, def:35, u:'%'},
+  {g:'🏛️ Space', id:'echoMix',  l:'Echo: level', min:0, max:100, step:1, def:0, u:'%'},
+  {g:'🏛️ Space', id:'revSize',  l:'Reverb: size', min:0.2, max:6, step:0.1, def:1.8, u:' s'},
+  {g:'🏛️ Space', id:'revMix',   l:'Reverb: level', min:0, max:100, step:1, def:0, u:'%'},
+  {g:'🔊 Output', id:'volume', l:'Volume', min:0, max:250, step:1, def:100, u:'%'},
+];
+const DEF = Object.fromEntries(PARAMS.map(p=>[p.id,p.def]));
+
+const BUILTIN = [
+  {n:'Normal',      e:'🙂', p:{}},
+  {n:'Chipmunk',     e:'🐿️', p:{pitch:9, treble:4, bass:-4}},
+  {n:'Giant',       e:'🗿', p:{pitch:-10, bass:6, revMix:15, revSize:2}},
+  {n:'Demon',        e:'😈', p:{pitch:-7, dist:35, bass:8, robotFreq:30, robotMix:25, revSize:2.5, revMix:25}},
+  {n:'Robot',        e:'🤖', p:{robotFreq:55, robotMix:100, dist:10, echoTime:12, echoFb:60, echoMix:35}},
+  {n:'Alien',     e:'👽', p:{pitch:4, robotFreq:250, robotMix:50, tremRate:8, tremDepth:40, echoTime:120, echoFb:30, echoMix:25}},
+  {n:'Dark Lord',  e:'🦹', p:{pitch:-5, bass:6, dist:15, robotFreq:40, robotMix:15, lp:8000, revSize:1.5, revMix:20}},
+  {n:'High',      e:'👧', p:{pitch:4, treble:3, bass:-4}},
+  {n:'Deep',       e:'🧔', p:{pitch:-4, bass:4}},
+  {n:'Radio',        e:'📻', p:{hp:400, lp:3500, dist:25, mid:6}},
+  {n:'Phone',      e:'☎️', p:{hp:300, lp:3400, mid:4, dist:10}},
+  {n:'Megaphone',      e:'📢', p:{hp:600, lp:4000, dist:50, mid:8}},
+  {n:'Ghost',      e:'👻', p:{pitch:3, tremRate:5, tremDepth:50, revSize:5, revMix:60, echoTime:300, echoFb:40, echoMix:30, lp:6000}},
+  {n:'Cave',       e:'🕳️', p:{revSize:4, revMix:50, echoTime:250, echoFb:45, echoMix:35}},
+  {n:'Underwater',    e:'🌊', p:{pitch:-2, lp:600, tremRate:4, tremDepth:30, revSize:2, revMix:30}},
+];
+
+/* ===================== Storage (safe) ===================== */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let custom = store.get('vc-custom', []);
+let cur = Object.assign({}, DEF, store.get('vc-current', {}));
+let activePreset = store.get('vc-active', 'Normal');
+
+/* ===================== Audio graph ===================== */
+let ctx, stream, src, dsp, nodes = {}, running = false, bypass = false, muted = false;
+const $ = id => document.getElementById(id);
+
+function distCurve(amount){
+  const k = amount * 4 + 1, n = 2048, c = new Float32Array(n);
+  for (let i = 0; i < n; i++){ const x = i * 2 / n - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); }
+  return c;
+}
+function impulse(sec){
+  const len = Math.max(1, Math.floor(ctx.sampleRate * sec)), b = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++){ const d = b.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5); }
+  return b;
+}
+
+async function makeDSP(){
+  try {
+    const url = URL.createObjectURL(new Blob([WORKLET_SRC], {type:'application/javascript'}));
+    await ctx.audioWorklet.addModule(url);
+    const node = new AudioWorkletNode(ctx, 'vc-dsp', {numberOfInputs:1, numberOfOutputs:1, outputChannelCount:[1],
+      channelCount:1, channelCountMode:'explicit', channelInterpretation:'speakers'});
+    return { node, set(r, g){ const t = ctx.currentTime; node.parameters.get('ratio').setTargetAtTime(r, t, 0.02); node.parameters.get('gate').setValueAtTime(g, t); } };
+  } catch (e) {
+    console.warn('AudioWorklet unavailable, using ScriptProcessor', e);
+    const VC = new Function(DSP_SRC + '; return VCDSP;')();
+    const d = new VC(ctx.sampleRate), node = ctx.createScriptProcessor(512, 1, 1);
+    const s = {ratio:1, gate:-100};
+    node.onaudioprocess = ev => { const o = ev.outputBuffer.getChannelData(0);
+      d.run(ev.inputBuffer.getChannelData(0), o, o.length, s.ratio, s.gate); };
+    return { node, set(r, g){ s.ratio = r; s.gate = g; } };
+  }
+}
+
+async function buildGraph(){
+  ctx = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'interactive'});
+  dsp = await makeDSP();
+  const N = nodes, c = ctx;
+  N.inAn = c.createAnalyser(); N.inAn.fftSize = 1024;
+  N.hp = c.createBiquadFilter(); N.hp.type = 'highpass';
+  N.lp = c.createBiquadFilter(); N.lp.type = 'lowpass';
+  N.bass = c.createBiquadFilter(); N.bass.type = 'lowshelf'; N.bass.frequency.value = 220;
+  N.mid = c.createBiquadFilter(); N.mid.type = 'peaking'; N.mid.frequency.value = 1300; N.mid.Q.value = 0.9;
+  N.treble = c.createBiquadFilter(); N.treble.type = 'highshelf'; N.treble.frequency.value = 4200;
+  // distortion
+  N.dIn = c.createGain(); N.dOut = c.createGain(); N.dDry = c.createGain(); N.dWet = c.createGain();
+  N.shaper = c.createWaveShaper(); N.shaper.oversample = '4x';
+  N.dIn.connect(N.dDry).connect(N.dOut); N.dIn.connect(N.shaper).connect(N.dWet).connect(N.dOut);
+  // ring modulator (robot)
+  N.rIn = c.createGain(); N.rOut = c.createGain(); N.rDry = c.createGain(); N.rWet = c.createGain();
+  N.ring = c.createGain(); N.ring.gain.value = 0;
+  N.osc = c.createOscillator(); N.osc.type = 'sine'; N.osc.connect(N.ring.gain); N.osc.start();
+  N.rIn.connect(N.rDry).connect(N.rOut); N.rIn.connect(N.ring).connect(N.rWet).connect(N.rOut);
+  // tremolo
+  N.trem = c.createGain(); N.lfo = c.createOscillator(); N.lfoAmt = c.createGain();
+  N.lfo.connect(N.lfoAmt).connect(N.trem.gain); N.lfo.start();
+  // space
+  N.post = c.createGain(); N.fx = c.createGain();
+  N.delay = c.createDelay(1.5); N.fb = c.createGain(); N.eWet = c.createGain();
+  N.conv = c.createConvolver(); N.rvWet = c.createGain();
+  N.post.connect(N.fx);
+  N.post.connect(N.delay); N.delay.connect(N.fb).connect(N.delay); N.delay.connect(N.eWet).connect(N.fx);
+  N.post.connect(N.conv).connect(N.rvWet).connect(N.fx);
+  // master
+  N.bypass = c.createGain(); N.bypass.gain.value = 0;
+  N.vol = c.createGain(); N.master = c.createGain();
+  N.comp = c.createDynamicsCompressor(); N.comp.threshold.value = -6; N.comp.ratio.value = 12; N.comp.attack.value = 0.002; N.comp.release.value = 0.1;
+  N.outAn = c.createAnalyser(); N.outAn.fftSize = 2048;
+  N.monitor = c.createGain(); N.monitor.gain.value = 0;
+  N.streamOut = c.createMediaStreamDestination();
+  N.streamIn = c.createMediaStreamDestination();
+  // chain: src -> inAn -> dsp -> hp -> lp -> eq -> dist -> ring -> trem -> post(space) -> fx -> vol -> comp -> master
+  N.inAn.connect(dsp.node).connect(N.hp).connect(N.lp).connect(N.bass).connect(N.mid).connect(N.treble)
+    .connect(N.dIn); N.dOut.connect(N.rIn); N.rOut.connect(N.trem).connect(N.post);
+  N.fx.connect(N.vol); N.inAn.connect(N.bypass).connect(N.vol);
+  N.vol.connect(N.comp).connect(N.master);
+  N.master.connect(N.outAn); N.master.connect(N.monitor).connect(c.destination); N.master.connect(N.streamOut);
+  N.inAn.connect(N.streamIn);
+  N.virt = new Audio(); N.virt.srcObject = N.streamOut.stream;
+  N.lastRev = -1; N.lastDist = -1;
+  applyAll();
+}
+
+function applyAll(){
+  if (!ctx) return;
+  const N = nodes, t = ctx.currentTime, P = cur, set = (a, v) => a.setTargetAtTime(v, t, 0.03);
+  dsp.set(Math.pow(2, P.pitch / 12), P.gate);
+  set(N.hp.frequency, P.hp); set(N.lp.frequency, P.lp);
+  set(N.bass.gain, P.bass); set(N.mid.gain, P.mid); set(N.treble.gain, P.treble);
+  if (P.dist !== N.lastDist){ N.shaper.curve = distCurve(P.dist); N.lastDist = P.dist; }
+  set(N.dWet.gain, P.dist / 100 * 0.6); set(N.dDry.gain, 1 - P.dist / 100 * 0.8);
+  set(N.osc.frequency, Math.max(1, P.robotFreq)); set(N.rWet.gain, P.robotMix / 100 * 1.4); set(N.rDry.gain, 1 - P.robotMix / 100);
+  set(N.lfo.frequency, P.tremRate); set(N.lfoAmt.gain, P.tremDepth / 200); set(N.trem.gain, 1 - P.tremDepth / 200);
+  set(N.delay.delayTime, Math.max(0.001, P.echoTime / 1000)); set(N.fb.gain, P.echoFb / 100);
+  set(N.eWet.gain, P.echoTime > 0 ? P.echoMix / 100 : 0);
+  if (P.revSize !== N.lastRev){ clearTimeout(N.revT); N.revT = setTimeout(()=>{ N.conv.buffer = impulse(P.revSize); N.lastRev = P.revSize; }, 120); }
+  set(N.rvWet.gain, P.revMix / 100 * 0.9);
+  set(N.vol.gain, muted ? 0 : P.volume / 100);
+  set(N.fx.gain, bypass ? 0 : 1); set(N.bypass.gain, bypass ? 1 : 0);
+}
+
+/* ===================== Mic ===================== */
+async function openMic(){
+  const devId = $('inSel').value;
+  const audio = { echoCancellation: $('ecChk').checked, noiseSuppression: $('nsChk').checked, autoGainControl: false };
+  if (devId && devId !== 'default') audio.deviceId = { ideal: devId };
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (src) src.disconnect();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio });
+  } catch (e) {
+    console.warn('Mic with settings failed, using default', e);
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+  src = ctx.createMediaStreamSource(stream);
+  src.connect(nodes.inAn);
+}
+
+async function start(){
+  try {
+    if (!ctx) await buildGraph();
+    await ctx.resume();
+    await openMic();
+    running = true; ui();
+    await listDevices();
+    const lat = ((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000 + 42;
+    $('latency').textContent = 'Latency: ≈' + Math.round(lat) + ' ms · ' + ctx.sampleRate + ' Hz' + (dsp.node instanceof AudioWorkletNode ? '' : ' · compatibility mode');
+    draw();
+  } catch (e) {
+    console.error(e);
+    $('statusTxt').textContent = 'No microphone access: ' + (e.message || e.name);
+  }
+}
+function stop(){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; running = false; if (ctx) ctx.suspend(); ui();
+}
+async function listDevices(){
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const ins = devs.filter(d => d.kind === 'audioinput'), outs = devs.filter(d => d.kind === 'audiooutput');
+  const curIn = stream && stream.getAudioTracks()[0] ? stream.getAudioTracks()[0].getSettings().deviceId : '';
+  $('inSel').innerHTML = ins.map((d, i) => `<option value="${d.deviceId}" ${d.deviceId === curIn ? 'selected' : ''}>${d.label || 'Microphone ' + (i+1)}</option>`).join('');
+  const prevOut = $('outSel').value || store.get('vc-out', '');
+  $('outSel').innerHTML = outs.map((d, i) => `<option value="${d.deviceId}">${d.label || 'Output ' + (i+1)}</option>`).join('') || '<option value="">Default</option>';
+  if (prevOut) $('outSel').value = prevOut;
+  if (!$('outSel').value){ const cable = outs.find(d => /cable input|vb-audio|voicemeeter/i.test(d.label)); if (cable) $('outSel').value = cable.deviceId; }
+}
+
+/* ===================== Virtual output ===================== */
+async function updateVirtual(){
+  if (!nodes.virt) return;
+  const el = nodes.virt;
+  try {
+    if ($('virtChk').checked){
+      if (el.setSinkId && $('outSel').value) await el.setSinkId($('outSel').value);
+      await el.play();
+    } else el.pause();
+  } catch (e) { console.warn(e); $('statusTxt').textContent = 'Could not select the output device'; }
+  store.set('vc-out', $('outSel').value);
+}
+
+/* ===================== Test recording ===================== */
+let recUrls = {orig:null, fx:null}, player = new Audio();
+function record(){
+  if (!running) return;
+  const mk = (stream, key) => new Promise(res => {
+    const chunks = [], mr = new MediaRecorder(stream);
+    mr.ondataavailable = e => chunks.push(e.data);
+    mr.onstop = () => { if (recUrls[key]) URL.revokeObjectURL(recUrls[key]); recUrls[key] = URL.createObjectURL(new Blob(chunks, {type: mr.mimeType})); res(); };
+    mr.start(); setTimeout(() => mr.stop(), 5000);
+  });
+  const btn = $('recBtn'); btn.disabled = true;
+  let s = 5; btn.innerHTML = `<span class="rec">● Speak… ${s}</span>`;
+  const iv = setInterval(() => { s--; if (s > 0) btn.innerHTML = `<span class="rec">● Speak… ${s}</span>`; }, 1000);
+  Promise.all([mk(nodes.streamIn.stream, 'orig'), mk(nodes.streamOut.stream, 'fx')]).then(() => {
+    clearInterval(iv); btn.disabled = false; btn.textContent = '⏺ Record again';
+    $('playOrig').disabled = $('playFx').disabled = false;
+    play('fx');
+  });
+}
+function play(k){ if (!recUrls[k]) return; player.pause(); player.src = recUrls[k]; player.play().catch(()=>{}); }
+
+/* ===================== Visualizer ===================== */
+const cv = $('viz'), g2 = cv.getContext('2d');
+let tdIn, tdOut, fq;
+function rms(a){ let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * a[i]; return Math.sqrt(s / a.length); }
+function draw(){
+  if (!running) { g2.clearRect(0, 0, cv.width, cv.height); return; }
+  requestAnimationFrame(draw);
+  const N = nodes;
+  tdIn = tdIn || new Float32Array(N.inAn.fftSize); tdOut = tdOut || new Float32Array(N.outAn.fftSize); fq = fq || new Uint8Array(N.outAn.frequencyBinCount);
+  N.inAn.getFloatTimeDomainData(tdIn); N.outAn.getFloatTimeDomainData(tdOut); N.outAn.getByteFrequencyData(fq);
+  $('inMeter').style.width = Math.min(100, rms(tdIn) * 400) + '%';
+  $('outMeter').style.width = Math.min(100, rms(tdOut) * 400) + '%';
+  const W = cv.width, H = cv.height;
+  g2.clearRect(0, 0, W, H);
+  const bars = 96, step = Math.floor(fq.length * 0.6 / bars), bw = W / bars;
+  for (let i = 0; i < bars; i++){
+    let v = 0; for (let j = 0; j < step; j++) v = Math.max(v, fq[i * step + j]);
+    const h = (v / 255) * H * 0.9;
+    const grd = g2.createLinearGradient(0, H, 0, H - h); grd.addColorStop(0, '#8b5cf6'); grd.addColorStop(1, '#22d3ee');
+    g2.fillStyle = grd; g2.globalAlpha = 0.55; g2.fillRect(i * bw + 1, H - h, bw - 2, h);
+  }
+  g2.globalAlpha = 1; g2.lineWidth = 2.5; g2.strokeStyle = '#ffffff'; g2.beginPath();
+  for (let i = 0; i < tdOut.length; i++){ const x = i / tdOut.length * W, y = H / 2 - tdOut[i] * H * 0.45; i ? g2.lineTo(x, y) : g2.moveTo(x, y); }
+  g2.stroke();
+  if (bypass){ g2.fillStyle = '#f59e0b'; g2.font = 'bold 28px system-ui'; g2.fillText('ORIGINAL (effect off)', 20, 40); }
+}
+
+/* ===================== UI ===================== */
+function ui(){
+  $('dot').classList.toggle('on', running);
+  $('statusTxt').textContent = running ? 'Microphone on' : 'Microphone off';
+  $('startBtn').textContent = running ? '⏹ Turn off microphone' : '🎙️ Turn on microphone';
+  $('startBtn').classList.toggle('stop', running);
+  $('recBtn').disabled = !running;
+  $('bypassBtn').textContent = bypass ? 'A/B: ORIGINAL (effect off)' : 'A/B: effect ON';
+  $('bypassBtn').classList.toggle('on', bypass);
+}
+
+function renderPresets(){
+  const all = BUILTIN.map(p => ({...p, custom:false})).concat(custom.map(p => ({...p, custom:true})));
+  $('presetGrid').innerHTML = all.map((p, i) =>
+    `<button class="preset ${p.custom ? 'custom' : ''} ${p.n === activePreset ? 'active' : ''}" data-i="${i}">
+      ${p.custom ? '<span class="x" data-del="' + i + '" title="Delete">✕</span>' : ''}
+      <span class="e">${p.e || '⭐'}</span><span class="n">${esc(p.n)}</span></button>`).join('');
+  $('presetGrid').querySelectorAll('.preset').forEach(b => b.onclick = ev => {
+    const i = +b.dataset.i;
+    if (ev.target.dataset.del !== undefined){ custom.splice(i - BUILTIN.length, 1); store.set('vc-custom', custom); renderPresets(); return; }
+    loadPreset(all[i]);
+  });
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function loadPreset(p){
+  cur = Object.assign({}, DEF, p.p); activePreset = p.n;
+  store.set('vc-current', cur); store.set('vc-active', activePreset);
+  syncSliders(); renderPresets(); applyAll();
+}
+
+function renderEditor(){
+  const groups = {};
+  PARAMS.forEach(p => (groups[p.g] = groups[p.g] || []).push(p));
+  $('groups').innerHTML = Object.entries(groups).map(([g, ps]) => `<div class="grp"><h3>${g}</h3>` +
+    ps.map(p => `<div class="param"><div class="top"><span>${p.l}</span><b id="v-${p.id}"></b></div>
+      <input type="range" id="s-${p.id}" min="${p.min}" max="${p.max}" step="${p.step}"></div>`).join('') + '</div>').join('');
+  PARAMS.forEach(p => {
+    const s = $('s-' + p.id);
+    s.oninput = () => { cur[p.id] = +s.value; showVal(p); activePreset = ''; store.set('vc-current', cur); store.set('vc-active', ''); applyAll(); };
+    s.ondblclick = () => { cur[p.id] = p.def; s.value = p.def; showVal(p); applyAll(); };
+  });
+  syncSliders();
+}
+function showVal(p){ const v = cur[p.id]; $('v-' + p.id).textContent = p.fmt ? p.fmt(v) : (p.id === 'pitch' && v > 0 ? '+' : '') + v + p.u; }
+function syncSliders(){ PARAMS.forEach(p => { const s = $('s-' + p.id); if (s){ s.value = cur[p.id]; showVal(p); } }); }
+
+/* ===================== Events ===================== */
+$('startBtn').onclick = () => running ? stop() : start();
+$('inSel').onchange = () => running && openMic();
+$('nsChk').onchange = $('ecChk').onchange = () => { store.set('vc-opts', {ns:$('nsChk').checked, ec:$('ecChk').checked}); running && openMic(); };
+$('monitorChk').onchange = () => { if (nodes.monitor) nodes.monitor.gain.setTargetAtTime($('monitorChk').checked ? 1 : 0, ctx.currentTime, 0.02); };
+$('virtChk').onchange = $('outSel').onchange = updateVirtual;
+$('bypassBtn').onclick = () => { bypass = !bypass; applyAll(); ui(); };
+$('recBtn').onclick = record;
+$('playOrig').onclick = () => play('orig');
+$('playFx').onclick = () => play('fx');
+$('resetBtn').onclick = () => loadPreset(BUILTIN[0]);
+$('savePreset').onclick = () => {
+  const n = $('presetName').value.trim() || ('My voice ' + (custom.length + 1));
+  const diff = {}; PARAMS.forEach(p => { if (cur[p.id] !== p.def) diff[p.id] = cur[p.id]; });
+  custom = custom.filter(c => c.n !== n); custom.push({n, e:'⭐', p:diff});
+  store.set('vc-custom', custom); activePreset = n; store.set('vc-active', n);
+  $('presetName').value = ''; renderPresets();
+  $('savePreset').textContent = '✓ Saved'; setTimeout(() => $('savePreset').textContent = '💾 Save', 1500);
+};
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $('tab-presets').classList.toggle('hidden', b.dataset.tab !== 'presets');
+  $('tab-editor').classList.toggle('hidden', b.dataset.tab !== 'editor');
+});
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  const k = e.key.toLowerCase();
+  if (k === 'b' || k === 'и'){ bypass = !bypass; applyAll(); ui(); }
+  else if (k === 'm' || k === 'ь'){ $('monitorChk').checked = !$('monitorChk').checked; $('monitorChk').onchange(); }
+  else if (/^[1-9]$/.test(e.key) && BUILTIN[+e.key - 1]) loadPreset(BUILTIN[+e.key - 1]);
+});
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener)
+  navigator.mediaDevices.addEventListener('devicechange', () => running && listDevices());
+
+const opts = store.get('vc-opts', {ns:false, ec:false});
+$('nsChk').checked = opts.ns; $('ecChk').checked = opts.ec;
+renderPresets(); renderEditor(); ui();
+
+/* ===================== Desktop app integration ===================== */
+function toggleBypass(){ bypass = !bypass; applyAll(); ui(); }
+function toggleMonitor(){ $('monitorChk').checked = !$('monitorChk').checked; $('monitorChk').onchange(); }
+function toggleMute(){ muted = !muted; $('muteBadge').classList.toggle('on', muted); applyAll(); }
+function saveState(){ store.set('vc-state', { mic: running, monitor: $('monitorChk').checked, virt: $('virtChk').checked, in: $('inSel').value }); }
+
+if (window.vcApp){
+  document.body.classList.add('app');
+  $('wMin').onclick = () => vcApp.win('min');
+  $('wMax').onclick = () => vcApp.win('max');
+  $('wClose').onclick = () => vcApp.win('close');
+  vcApp.onMaximized(v => $('wMax').textContent = v ? '❐' : '☐');
+  vcApp.onHotkey((a, arg) => {
+    if (a === 'bypass') toggleBypass();
+    else if (a === 'monitor') toggleMonitor();
+    else if (a === 'mute') toggleMute();
+    else if (a === 'preset' && BUILTIN[arg]) loadPreset(BUILTIN[arg]);
+  });
+  ['monitorChk', 'virtChk', 'startBtn', 'inSel'].forEach(id => $(id).addEventListener(id === 'startBtn' ? 'click' : 'change', () => setTimeout(saveState, 300)));
+
+  // Autostart: turn on the mic and restore the output like last time
+  const st = store.get('vc-state', { mic: true });
+  if (st.mic !== false) {
+    start().then(async () => {
+      if (!running) return;
+      if (st.in && [...$('inSel').options].some(o => o.value === st.in) && $('inSel').value !== st.in){ $('inSel').value = st.in; await openMic(); }
+      if (st.monitor){ $('monitorChk').checked = true; $('monitorChk').onchange(); }
+      if (st.virt){ $('virtChk').checked = true; await updateVirtual(); }
+    });
+  }
+} else if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  $('statusTxt').textContent = 'No microphone access in this browser — open the file in Chrome or Edge';
+}
+</script>
+</body>
+</html>
